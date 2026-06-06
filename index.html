@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photozine - Turn your photos into a printable mini magazine</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.41.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* Force 4:5 aspect ratio on slots */
+        .aspect-4-5 {
+            aspect-ratio: 4 / 5;
+        }
+        /* Landscape A4 constraint for desktop preview */
+        .a4-landscape {
+            aspect-ratio: 1.414 / 1;
+            width: 100%;
+            max-width: 1050px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 font-sans" x-data="app()">
+
+    <header class="bg-white shadow-sm p-4 sticky top-0 z-10">
+        <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+                <h1 class="text-xl font-bold text-gray-900">A4 Photo Sequencer</h1>
+                <p class="text-xs text-gray-500">Sequence layout: Top (7,6,5,4) | Bottom (8,1,2,3)</p>
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <button @click="download('png')" class="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded shadow transition">PNG</button>
+                <button @click="download('jpeg')" class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded shadow transition">JPG</button>
+                <button @click="download('pdf')" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 px-4 rounded shadow transition">PDF</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto p-4 md:py-8">
+        <div class="bg-white p-4 md:p-8 shadow-lg rounded-lg border border-gray-200 mx-auto a4-landscape" id="a4-canvas">
+            <div class="grid grid-cols-4 gap-2 md:gap-4 h-full w-full">
+                
+                <template x-for="(slotId, index) in layoutOrder" :key="slotId">
+                    <div class="relative bg-gray-50 border-2 border-dashed border-gray-300 rounded-md overflow-hidden aspect-4-5 flex flex-col items-center justify-center group hover:border-blue-400 transition">
+                        
+                        <span class="absolute top-2 left-2 bg-black/60 text-white text-xs font-bold px-2 py-0.5 rounded-full z-10" x-text="'Slot ' + slotId"></span>
+                        
+                        <template x-if="images[slotId]">
+                            <div class="w-full h-full relative cursor-move overflow-hidden"
+                                 @mousedown="startDrag($event, slotId)"
+                                 @touchstart="startDrag($event, slotId)">
+                                <img :src="images[slotId].src" 
+                                     :style="`transform: translate(${images[slotId].x}px, ${images[slotId].y}px) scale(${images[slotId].scale}); transform-origin: center;`"
+                                     class="absolute w-full h-full object-cover pointer-events-none max-w-none select-none" />
+                                
+                                <div class="absolute inset-x-0 bottom-0 bg-black/70 p-1.5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                                    <div class="flex gap-1">
+                                        <button @click.stop="zoom(slotId, 0.1)" class="bg-white/20 hover:bg-white/40 text-white p-1 rounded text-xs px-2">+</button>
+                                        <button @click.stop="zoom(slotId, -0.1)" class="bg-white/20 hover:bg-white/40 text-white p-1 rounded text-xs px-2">-</button>
+                                    </div>
+                                    <button @click.stop="removeImage(slotId)" class="bg-red-500/80 hover:bg-red-500 text-white text-xs px-2 py-1 rounded">Remove</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="!images[slotId]">
+                            <label class="w-full h-full flex flex-col items-center justify-center cursor-pointer p-2 text-center">
+                                <svg class="w-6 h-6 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                <span class="text-[10px] sm:text-xs text-gray-400 font-medium">Tap to Upload</span>
+                                <input type="file" accept="image/*" class="hidden" @change="handleUpload($event, slotId)">
+                            </label>
+                        </template>
+
+                    </div>
+                </template>
+
+            </div>
+        </div>
+        
+        <p class="text-center text-xs text-gray-400 mt-4">💡 Hint: Drag uploaded images to adjust positioning within their frames. Use + / - to scale.</p>
+    </main>
+
+    <script>
+        function app() {
+            return {
+                // The explicit sequence layout requested: Top row (7,6,5,4), Bottom row (8,1,2,3)
+                layoutOrder: [7, 6, 5, 4, 8, 1, 2, 3],
+                images: {}, // Stores file source, x offset, y offset, and scaling factor per slot ID
+                
+                // Drag and drop tracking variables
+                dragging: false,
+                activeSlot: null,
+                startX: 0,
+                startY: 0,
+
+                handleUpload(event, slotId) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.images[slotId] = {
+                            src: e.target.result,
+                            x: 0,
+                            y: 0,
+                            scale: 1
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                },
+
+                removeImage(slotId) {
+                    delete this.images[slotId];
+                },
+
+                zoom(slotId, amount) {
+                    if (this.images[slotId]) {
+                        this.images[slotId].scale = Math.max(0.5, this.images[slotId].scale + amount);
+                    }
+                },
+
+                startDrag(e, slotId) {
+                    this.dragging = true;
+                    this.activeSlot = slotId;
+                    // Support both mouse and touch events
+                    const clientX = e.clientX || e.touches[0].clientX;
+                    const clientY = e.clientY || e.touches[0].clientY;
+                    
+                    this.startX = clientX - this.images[slotId].x;
+                    this.startY = clientY - this.images[slotId].y;
+
+                    const moveHandler = (moveEvent) => {
+                        if (!this.dragging || !this.activeSlot) return;
+                        const currentX = moveEvent.clientX || (moveEvent.touches ? moveEvent.touches[0].clientX : null);
+                        const currentY = moveEvent.clientY || (moveEvent.touches ? moveEvent.touches[0].clientY : null);
+                        
+                        if (currentX !== null && currentY !== null) {
+                            this.images[this.activeSlot].x = currentX - this.startX;
+                            this.images[this.activeSlot].y = currentY - this.startY;
+                        }
+                    };
+
+                    const stopHandler = () => {
+                        this.dragging = false;
+                        this.activeSlot = null;
+                        window.removeEventListener('mousemove', moveHandler);
+                        window.removeEventListener('mouseup', stopHandler);
+                        window.removeEventListener('touchmove', moveHandler);
+                        window.removeEventListener('touchend', stopHandler);
+                    };
+
+                    window.addEventListener('mousemove', moveHandler);
+                    window.addEventListener('mouseup', stopHandler);
+                    window.addEventListener('touchmove', moveHandler, { passive: false });
+                    window.addEventListener('touchend', stopHandler);
+                },
+
+                async download(format) {
+                    const canvasElement = document.getElementById('a4-canvas');
+                    
+                    // Hide controls dynamically for cleaner output capture
+                    const badges = canvasElement.querySelectorAll('span');
+                    badges.forEach(b => b.style.opacity = '0');
+
+                    // Convert HTML Element to High Res Canvas
+                    const canvas = await html2canvas(canvasElement, {
+                        scale: 3, // Enhances print/download quality significantly
+                        useCORS: true
+                    });
+
+                    // Restore badges visibility
+                    badges.forEach(b => b.style.opacity = '1');
+
+                    const imgData = canvas.toDataURL(`image/${format === 'pdf' ? 'jpeg' : format}`, 0.95);
+
+                    if (format === 'pdf') {
+                        const { jsPDF } = window.jspdf;
+                        // Initialize an A4 document in Landscape layout
+                        const pdf = new jsPDF({
+                            orientation: 'landscape',
+                            unit: 'mm',
+                            format: 'a4'
+                        });
+                        
+                        // Dimensions of A4 Landscape in mm
+                        pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+                        pdf.save('photo-layout.pdf');
+                    } else {
+                        // Standard Image downloader trigger
+                        const link = document.createElement('a');
+                        link.download = `photo-layout.${format}`;
+                        link.href = imgData;
+                        link.click();
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
