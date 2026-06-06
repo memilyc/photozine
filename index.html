@@ -6,7 +6,7 @@
     <title>Photozine - 8-Page Pocket Zine Creator</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.41.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/modern-screenshot@1.6.40/dist/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         /* Define strict landscape A4 constraint for the workspace */
@@ -15,7 +15,6 @@
             width: 100%;
             max-width: 1050px;
         }
-        /* Optimized to ensure seamless edge-to-edge canvas generation */
         #a4-canvas * {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -70,7 +69,7 @@
                             'border-b-2 border-b-dashed border-red-500/80': slotId === 6 || slotId === 5
                          }">
                         
-                        <div class="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm z-30 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity"
+                        <div class="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm z-30 flex items-center gap-1 data-badge"
                              :style="isUpsideDown(slotId) ? 'transform: rotate(180deg); transform-origin: center;' : ''">
                             <span x-text="'Page ' + slotId"></span>
                         </div>
@@ -87,7 +86,7 @@
                                          class="absolute w-full h-full object-cover pointer-events-none max-w-none" />
                                 </div>
                                 
-                                <div class="absolute inset-x-0 bottom-0 bg-black/80 p-1.5 md:p-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-40 gap-2">
+                                <div class="absolute inset-x-0 bottom-0 bg-black/80 p-1.5 md:p-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-40 gap-2 data-controls">
                                     <div class="flex gap-1.5">
                                         <button @click.stop="zoom(slotId, 0.1)" class="bg-white/10 hover:bg-white/30 text-white p-1 rounded-sm text-sm px-2.5 font-black flex items-center justify-center">+</button>
                                         <button @click.stop="zoom(slotId, -0.1)" class="bg-white/10 hover:bg-white/30 text-white p-1 rounded-sm text-sm px-2.5 font-black flex items-center justify-center">-</button>
@@ -117,9 +116,9 @@
                 ✂️ Zine Assembly Guide
             </h3>
             <ul class="space-y-1.5 list-disc pl-4 opacity-80">
-                <li><strong>Maximized Print Space:</strong> Gaps have been completely removed. Frames connects edge-to-edge to eliminate printable whitespace.</li>
-                <li><strong>Top Row (7, 6, 5, 4)</strong> images are automatically rotated 180° by default, as required for the physical folding pattern.</li>
-                <li>Cut purely along the red dashed line spine dividing pages 6/5 from their bottom counterpart frames.</li>
+                <li><strong>Maximized Print Space:</strong> Gaps have been completely removed. Frames connect edge-to-edge seamlessly.</li>
+                <li><strong>Top Row (7, 6, 5, 4)</strong> images are automatically rotated 180° by default.</li>
+                <li>Cut along the red dashed line spine dividing pages 6/5 from their bottom counterpart frames.</li>
             </ul>
         </div>
     </main>
@@ -175,21 +174,22 @@
                 },
 
                 processFile(file, slotId) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        this.images[slotId] = {
-                            src: e.target.result,
-                            x: 0,
-                            y: 0,
-                            scale: 1
-                        };
+                    // Using URL.createObjectURL instead of FileReader Base64 strings.
+                    // This uses less memory and prevents mobile browsers from breaking/freezing on export.
+                    const blobUrl = URL.createObjectURL(file);
+                    this.images[slotId] = {
+                        src: blobUrl,
+                        x: 0,
+                        y: 0,
+                        scale: 1
                     };
-                    reader.readAsDataURL(file);
                 },
 
                 removeImage(slotId) {
-                    // Simple, direct state deletion per slot ID
-                    delete this.images[slotId];
+                    if (this.images[slotId]) {
+                        URL.revokeObjectURL(this.images[slotId].src); // Free memory allocation
+                        delete this.images[slotId];
+                    }
                 },
 
                 zoom(slotId, amount) {
@@ -242,46 +242,48 @@
                 async download(format) {
                     const canvasElement = document.getElementById('a4-canvas');
                     
-                    // Optimized hiding strategy for clean output render
-                    const badges = canvasElement.querySelectorAll('.text-\\[10px\\]');
-                    badges.forEach(badge => badge.style.opacity = '0');
+                    // Seamlessly strip badges out before taking the screenshot
+                    const badges = canvasElement.querySelectorAll('.data-badge');
+                    badges.forEach(b => b.style.display = 'none');
 
-                    // Keep the red spine cut line, but hide borders if they exist
-                    const frames = canvasElement.querySelectorAll('.border');
-                    frames.forEach(f => f.style.border = '0');
+                    try {
+                        // modern-screenshot parameters optimize rendering and prevent canvas errors
+                        const options = {
+                            scale: 3, // Maintains sharp print definition
+                            backgroundColor: '#ffffff',
+                            style: {
+                                borderRadius: '0'
+                            }
+                        };
 
-                    const canvas = await html2canvas(canvasElement, {
-                        scale: 3, 
-                        useCORS: true,
-                        // Specific high-resolution canvas capture parameters
-                        logging: false,
-                        x: 0,
-                        y: 0,
-                        width: canvasElement.offsetWidth,
-                        height: canvasElement.offsetHeight
-                    });
+                        let imgData;
+                        if (format === 'png') {
+                            imgData = await modernScreenshot.domToPng(canvasElement, options);
+                        } else {
+                            imgData = await modernScreenshot.domToJpeg(canvasElement, options);
+                        }
 
-                    // Restore workspace styles
-                    badges.forEach(badge => badge.style.opacity = '');
-                    frames.forEach(f => f.style.border = '');
-
-                    const imgData = canvas.toDataURL(`image/${format === 'pdf' ? 'jpeg' : format}`, 0.98);
-
-                    if (format === 'pdf') {
-                        const { jsPDF } = window.jspdf;
-                        const pdf = new jsPDF({
-                            orientation: 'landscape',
-                            unit: 'mm',
-                            format: 'a4'
-                        });
-                        // Add high-resolution JPEG data exactly to the A4 sheet boundaries (297x210mm)
-                        pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
-                        pdf.save('photozine-printout.pdf');
-                    } else {
-                        const link = document.createElement('a');
-                        link.download = `photozine-printout.${format}`;
-                        link.href = imgData;
-                        link.click();
+                        if (format === 'pdf') {
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF({
+                                orientation: 'landscape',
+                                unit: 'mm',
+                                format: 'a4'
+                            });
+                            pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+                            pdf.save('photozine-printout.pdf');
+                        } else {
+                            const link = document.createElement('a');
+                            link.download = `photozine-printout.${format}`;
+                            link.href = imgData;
+                            link.click();
+                        }
+                    } catch (error) {
+                        console.error('Export failed:', error);
+                        alert('Oops! Your browser ran out of memory rendering. Try uploading slightly smaller image files.');
+                    } finally {
+                        // Restore workspace look cleanly
+                        badges.forEach(b => b.style.display = '');
                     }
                 }
             }
