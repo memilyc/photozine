@@ -4,77 +4,70 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photozine - Pocket Mini-Magazine Creator</title>
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <!-- Alpine.js for lightweight state management -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <!-- html2canvas for PNG/JPG export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.41.1/html2canvas.min.js"></script>
-    <!-- jsPDF for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        .aspect-4-5 {
-            aspect-ratio: 4 / 5;
+        /* Updated to 3:4 aspect ratio per slot */
+        .aspect-3-4 {
+            aspect-ratio: 3 / 4;
         }
+        /* Landscape A4 constraint for desktop workspace */
         .a4-landscape {
             aspect-ratio: 1.414 / 1;
             width: 100%;
             max-width: 1050px;
         }
-        /* Custom scissor icon styling for the cutting line */
+        /* Scissor cut overlay marker */
         .cut-line::after {
             content: '✂';
             position: absolute;
-            bottom: -8px;
+            bottom: -9px;
             right: 50%;
             transform: translateX(50%);
             font-size: 14px;
             z-index: 30;
+            background: white;
+            padding: 0 4px;
+            border-radius: 4px;
         }
-        /* Ensure canvas remains clean during image rendering */
         #a4-canvas * {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
     </style>
 </head>
-<!-- Theme configuration using Alpine.js matching your reference style -->
 <body class="transition-colors duration-200 min-h-screen text-sm" 
       :class="darkMode ? 'bg-[#0d1117] text-[#c9d1d9]' : 'bg-[#f6f8fa] text-[#24292f]'"
       x-data="app()" 
       x-init="initTheme()">
 
-    <!-- Header Panel -->
-    <header class="border-b transition-colors duration-200 sticky top-0延 z-50 shadow-sm"
+    <header class="border-b transition-colors duration-200 sticky top-0 z-50 shadow-sm"
             :class="darkMode ? 'bg-[#161b22] border-[#21262d]' : 'bg-white border-[#e1e4e6]'">
         <div class="max-w-6xl mx-auto p-4 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
                 <h1 class="text-xl font-bold tracking-tight flex items-center gap-2" :class="darkMode ? 'text-white' : 'text-[#24292f]'">
                     📖 Photozine
                 </h1>
-                <p class="text-xs mt-0.5 opacity-70">Turn your photos into a printable mini magazine!</p>
+                <p class="text-xs mt-0.5 opacity-70">Turn your photos into a printable mini magazine! (3:4 Format)</p>
             </div>
             
-            <!-- Global Control Dashboard -->
             <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                <!-- Bulk Upload Button -->
                 <label class="cursor-pointer font-medium text-xs px-3 py-2 rounded border transition-colors flex items-center gap-1.5"
                        :class="darkMode ? 'bg-[#21262d] border-[#30363d] hover:bg-[#30363d] text-white' : 'bg-white border-[#d0d7de] hover:bg-[#f6f8fa] text-[#24292f]'">
                     ⚡ Bulk Upload Max (8)
                     <input type="file" accept="image/*" multiple class="hidden" @change="handleBulkUpload($event)">
                 </label>
 
-                <!-- Format Downloader Controls -->
                 <div class="flex items-center rounded border overflow-hidden" :class="darkMode ? 'border-[#30363d]' : 'border-[#d0d7de]'">
                     <button @click="download('png')" class="px-3 py-2 text-xs font-semibold hover:opacity-80 bg-blue-600 text-white border-r border-black/10">PNG</button>
                     <button @click="download('jpeg')" class="px-3 py-2 text-xs font-semibold hover:opacity-80 bg-indigo-600 text-white border-r border-black/10">JPG</button>
                     <button @click="download('pdf')" class="px-3 py-2 text-xs font-semibold hover:opacity-80 bg-emerald-600 text-white">PDF</button>
                 </div>
 
-                <!-- Theme Toggle Switcher -->
                 <button @click="toggleTheme()" class="p-2 rounded border transition-colors"
                         :class="darkMode ? 'bg-[#21262d] border-[#30363d] hover:bg-[#30363d] text-yellow-400' : 'bg-white border-[#d0d7de] hover:bg-[#f6f8fa] text-gray-500'">
-                    <!-- Sun / Moon Icon toggles instantly -->
                     <svg x-show="!darkMode" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
                     <svg x-show="darkMode" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 14.05l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zm2.121-10.607a1 1 0 010 1.414l-.707.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM6 11a1 1 0 100-2H5a1 1 0 100 2h1z" clip-rule="evenodd"></path></svg>
                 </button>
@@ -82,35 +75,27 @@
         </div>
     </header>
 
-    <!-- Main Workspace Layout -->
     <main class="max-w-6xl mx-auto p-4 my-4 flex flex-col items-center justify-center gap-6">
         
-        <!-- A4 Frame Sheet Container -->
-        <div class="p-0 shadow-2xl rounded-sm border border-black/10 overflow-hidden a4-landscape bg-white text-black" id="a4-canvas">
-            <!-- Strict Grid Layout (No Margins, Seamless Edge-To-Edge Transitions) -->
+        <div class="p-0 shadow-2xl rounded-sm overflow-hidden a4-landscape bg-white text-black" id="a4-canvas">
             <div class="grid grid-cols-4 grid-rows-2 h-full w-full relative bg-white">
                 
-                <!-- Dynamic Construction Loop processing requested fold positions -->
                 <template x-for="(slotId, index) in layoutOrder" :key="slotId">
-                    <div class="relative overflow-hidden aspect-4-5 flex flex-col items-center justify-center group border border-gray-200/40 select-none"
+                    <div class="relative overflow-hidden aspect-3-4 flex flex-col items-center justify-center group border-[0.5px] border-gray-300/60 select-none"
                          :class="{
                             'border-b-2 border-b-dashed border-b-red-500 cut-line': slotId === 6 || slotId === 5
                          }">
                         
-                        <!-- Page Sequencing Indicator Overlays -->
                         <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded z-30 flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity"
                              :style="isUpsideDown(slotId) ? 'transform: rotate(180deg); transform-origin: center;' : ''">
                             <span x-text="'Page ' + slotId"></span>
-                            <span class="opacity-50" x-text="isUpsideDown(slotId) ? '(Top)' : '(Bottom)'"></span>
                         </div>
                         
-                        <!-- Process Slot Image Data -->
                         <template x-if="images[slotId]">
                             <div class="w-full h-full relative cursor-move overflow-hidden"
                                  @mousedown="startDrag($event, slotId)"
                                  @touchstart="startDrag($event, slotId)">
                                 
-                                <!-- Core Canvas Frame (Flips Row-1 assets perfectly by 180deg) -->
                                 <div class="w-full h-full absolute inset-0"
                                      :style="isUpsideDown(slotId) ? 'transform: rotate(180deg); transform-origin: center;' : ''">
                                     <img :src="images[slotId].src" 
@@ -118,7 +103,6 @@
                                          class="absolute w-full h-full object-cover pointer-events-none max-w-none" />
                                 </div>
                                 
-                                <!-- Frame Modification Panel Overlay (Always shows upright relative to screen view) -->
                                 <div class="absolute inset-x-0 bottom-0 bg-black/80 p-1.5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-40 gap-1">
                                     <div class="flex gap-1">
                                         <button @click.stop="zoom(slotId, 0.1)" class="bg-white/20 hover:bg-white/40 text-white p-1 rounded text-xs px-2 font-bold">+</button>
@@ -129,7 +113,6 @@
                             </div>
                         </template>
 
-                        <!-- Unpopulated Empty Target State -->
                         <template x-if="!images[slotId]">
                             <label class="w-full h-full flex flex-col items-center justify-center cursor-pointer p-2 text-center hover:bg-gray-50 transition-colors bg-white">
                                 <svg class="w-5 h-5 text-gray-300 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -144,26 +127,23 @@
             </div>
         </div>
 
-        <!-- Practical Zine Folding Instruction Reference Sheet -->
         <div class="w-full max-w-xl p-4 rounded-lg border text-xs"
              :class="darkMode ? 'bg-[#161b22] border-[#21262d]' : 'bg-white border-[#e1e4e6]'">
             <h3 class="font-bold mb-2 flex items-center gap-1.5" :class="darkMode ? 'text-white' : 'text-gray-900'">
                 ✂️ Zine Assembly Guide
             </h3>
             <ul class="space-y-1.5 list-disc pl-4 opacity-80">
-                <li><strong>Top Row (7, 6, 5, 4)</strong> is flipped upside down intentionally! This aligns everything perfectly when folded.</li>
-                <li>The red dotted line between the rows shows exactly where to cut.</li>
-                <li><strong>Folding Sequence:</strong> Fold your printout in half horizontally, then vertically into quadrants, cut along the center slice indicator line, open it up, and assemble into your 8-page mini magazine.</li>
+                <li><strong>3:4 Layout Maximized:</strong> The grid margins have been completely removed and frames now connect edge-to-edge seamlessly to eliminate printable gaps.</li>
+                <li><strong>Top Row (7, 6, 5, 4)</strong> images face upside down naturally to balance out properly once folded.</li>
+                <li>Cut purely along the red dotted line spine dividing pages 6/5 from their bottom counterpart frames.</li>
             </ul>
         </div>
     </main>
 
-    <!-- Global Application State Scripts -->
     <script>
         function app() {
             return {
                 darkMode: false,
-                // Top row: 7, 6, 5, 4 | Bottom row: 8, 1, 2, 3
                 layoutOrder: [7, 6, 5, 4, 8, 1, 2, 3],
                 images: {},
                 
@@ -173,7 +153,6 @@
                 startY: 0,
 
                 initTheme() {
-                    // Check local system storage data or device system configurations
                     if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                         this.darkMode = true;
                     }
@@ -185,7 +164,6 @@
                 },
 
                 isUpsideDown(slotId) {
-                    // Top row frames (7, 6, 5, 4) require full inversion processing
                     return [7, 6, 5, 4].includes(slotId);
                 },
 
@@ -199,20 +177,16 @@
                     const files = Array.from(event.target.files);
                     if (files.length === 0) return;
 
-                    // Bulk population uses sequence: Page 1, 2, 3, 4, 5, 6, 7, 8
                     const fillSequence = [1, 2, 3, 4, 5, 6, 7, 8];
                     let currentFileIdx = 0;
 
                     for (let i = 0; i < fillSequence.length; i++) {
                         const targetSlot = fillSequence[i];
-                        
-                        // Check if the slot is empty and we still have uploaded files left
                         if (!this.images[targetSlot] && currentFileIdx < files.length) {
                             this.processFile(files[currentFileIdx], targetSlot);
                             currentFileIdx++;
                         }
                     }
-                    // Reset file input target value so users can re-upload if needed
                     event.target.value = '';
                 },
 
@@ -255,7 +229,6 @@
                         let currentY = moveEvent.clientY || (moveEvent.touches ? moveEvent.touches[0].clientY : null);
                         
                         if (currentX !== null && currentY !== null) {
-                            // If it's a top-row flipped item, invert drag directions so interactions feel intuitive
                             if (this.isUpsideDown(this.activeSlot)) {
                                 this.images[this.activeSlot].x = this.startX - currentX;
                                 this.images[this.activeSlot].y = this.startY - currentY;
@@ -284,11 +257,9 @@
                 async download(format) {
                     const canvasElement = document.getElementById('a4-canvas');
                     
-                    // Temporarily hide action badges for a seamless render output
-                    const elementsToHide = canvasElement.querySelectorAll('.opacity-60, .cut-line');
+                    const elementsToHide = canvasElement.querySelectorAll('.text-\\[10px\\], .cut-line');
                     elementsToHide.forEach(el => {
                         if (el.classList.contains('cut-line')) {
-                            // Keep the border line during export but remove the scissor text element
                             el.style.setProperty('--tw-content', '""');
                         } else {
                             el.style.opacity = '0';
@@ -300,7 +271,6 @@
                         useCORS: true
                     });
 
-                    // Restore action badge layouts
                     elementsToHide.forEach(el => {
                         if (!el.classList.contains('cut-line')) {
                             el.style.opacity = '';
