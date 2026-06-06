@@ -69,15 +69,21 @@
                         </div>
                         
                         <template x-if="images[slotId]">
-                            <div class="w-full h-full relative cursor-move overflow-hidden"
+                            <div class="w-full h-full relative cursor-move overflow-hidden bg-neutral-900"
                                  @mousedown="startDrag($event, slotId)"
                                  @touchstart="startDrag($event, slotId)">
                                 
-                                <div class="w-full h-full absolute inset-0">
+                                <div class="w-full h-full absolute inset-0 flex items-center justify-center">
                                     <img :id="'img-element-' + slotId"
-                                         :src=images[slotId].src 
-                                         :style="`transform: translate(${images[slotId].x}px, ${images[slotId].y}px) scale(${images[slotId].scale}) ${isUpsideDown(slotId) ? 'rotate(180deg)' : ''}; transform-origin: center;`"
-                                         class="absolute w-full h-full object-cover pointer-events-none max-w-none" />
+                                         :src="images[slotId].src" 
+                                         :style="`
+                                            transform: translate(${images[slotId].x}px, ${images[slotId].y}px) scale(${images[slotId].scale}) ${isUpsideDown(slotId) ? 'rotate(180deg)' : ''}; 
+                                            transform-origin: center;
+                                            max-width: none;
+                                            max-height: none;
+                                         `"
+                                         class="absolute pointer-events-none"
+                                         @load="setImageDefaultDimensions($event, slotId)" />
                                 </div>
                                 
                                 <div class="absolute inset-x-0 bottom-0 bg-black/80 p-1.5 md:p-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-40 gap-2">
@@ -110,7 +116,7 @@
                 ✂️ Zine Assembly Guide
             </h3>
             <ul class="space-y-1.5 list-disc pl-4 opacity-80">
-                <li><strong>Maximized Print Space:</strong> Zero gap design. Exports directly using physical coordinates to protect high-definition photo assets from memory crashes.</li>
+                <li><strong>Uncropped Positioning:</strong> Your full photo is safely loaded. You can drag to pan around hidden parts of wide or tall shots seamlessly.</li>
                 <li><strong>Top Row (7, 6, 5, 4)</strong> images face upside down naturally to balance out properly once folded.</li>
                 <li>Cut purely along the center red dashed line dividing the top and bottom rows.</li>
             </ul>
@@ -173,8 +179,35 @@
                         src: blobUrl,
                         x: 0,
                         y: 0,
-                        scale: 1
+                        scale: 1,
+                        initialScale: 1
                     };
+                },
+
+                // Dynamically sets full size bounding measurements based on container limits
+                setImageDefaultDimensions(event, slotId) {
+                    const img = event.target;
+                    const container = img.parentElement;
+                    
+                    const containerW = container.offsetWidth;
+                    const containerH = container.offsetHeight;
+                    const imgW = img.naturalWidth;
+                    const imgH = img.naturalHeight;
+
+                    const scaleX = containerW / imgW;
+                    const scaleY = containerH / imgH;
+                    
+                    // Emulate "object-cover" baseline scale but expose uncropped excess data to transforms
+                    const baseScale = Math.max(scaleX, scaleY);
+                    
+                    // Assign fixed height/width styles directly to bypass CSS auto-contain constraints
+                    img.style.width = imgW + 'px';
+                    img.style.height = imgH + 'px';
+
+                    if (this.images[slotId]) {
+                        this.images[slotId].scale = baseScale;
+                        this.images[slotId].initialScale = baseScale;
+                    }
                 },
 
                 removeImage(slotId) {
@@ -186,7 +219,9 @@
 
                 zoom(slotId, amount) {
                     if (this.images[slotId]) {
-                        this.images[slotId].scale = Math.max(0.1, this.images[slotId].scale + amount);
+                        // Scales increments proportionally relative to the baseline cover size
+                        const step = this.images[slotId].initialScale * amount;
+                        this.images[slotId].scale = Math.max(0.05, this.images[slotId].scale + step);
                     }
                 },
 
@@ -206,8 +241,14 @@
                         let currentY = moveEvent.clientY || (moveEvent.touches ? moveEvent.touches[0].clientY : null);
                         
                         if (currentX !== null && currentY !== null) {
-                            this.images[this.activeSlot].x = currentX - this.startX;
-                            this.images[this.activeSlot].y = currentY - this.startY;
+                            // Flips controls if moving items on top row
+                            if (this.isUpsideDown(this.activeSlot)) {
+                                this.images[this.activeSlot].x = this.startX - currentX;
+                                this.images[this.activeSlot].y = this.startY - currentY;
+                            } else {
+                                this.images[this.activeSlot].x = currentX - this.startX;
+                                this.images[this.activeSlot].y = currentY - this.startY;
+                            }
                         }
                     };
 
@@ -226,9 +267,7 @@
                     window.addEventListener('touchend', stopHandler);
                 },
 
-                // HD High Resolution Export Pipeline Engine
                 async download(format) {
-                    // Create an explicit high-res canvas calculation grid matching 300 DPI A4 limits
                     const printWidth = 3508;
                     const printHeight = 2480;
 
@@ -237,26 +276,22 @@
                     exportCanvas.height = printHeight;
                     const ctx = exportCanvas.getContext('2d');
 
-                    // Fill white base background context sheet
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, printWidth, printHeight);
 
                     const colWidth = printWidth / 4;
                     const rowHeight = printHeight / 2;
 
-                    // Grid sequence parsing
                     const gridLayout = [
                         [7, 6, 5, 4],
                         [8, 1, 2, 3]
                     ];
 
-                    // Process each slot via image matrix loading loops
                     for (let row = 0; row < 2; row++) {
                         for (let col = 0; col < 4; col++) {
                             const slotId = gridLayout[row][col];
                             const imgState = this.images[slotId];
 
-                            // Calculate current grid coordinate viewport positions
                             const slotX = col * colWidth;
                             const slotY = row * rowHeight;
 
@@ -264,48 +299,30 @@
                                 const imgElement = document.getElementById('img-element-' + slotId);
                                 if (!imgElement) continue;
 
-                                // Await secure load configurations
-                                await new Promise((resolve) => {
-                                    if (imgElement.complete) resolve();
-                                    else imgElement.onload = resolve;
-                                });
-
                                 ctx.save();
                                 
-                                // Create a clip region for this specific grid cell to cleanly cut overflow
                                 ctx.beginPath();
                                 ctx.rect(slotX, slotY, colWidth, rowHeight);
                                 ctx.clip();
 
-                                // Center transformation calculations matching object-cover mechanisms
                                 ctx.translate(slotX + colWidth / 2, slotY + rowHeight / 2);
 
-                                // If top row, execute a structural 180° inversion loop
                                 if (this.isUpsideDown(slotId)) {
                                     ctx.rotate(Math.PI);
                                 }
 
-                                // Apply live dragging translation adjustments
                                 const viewContainer = imgElement.parentElement;
-                                const scaleFactorX = colWidth / viewContainer.offsetWidth;
-                                const scaleFactorY = rowHeight / viewContainer.offsetHeight;
+                                // Convert display coordinates over to high-resolution print pixels
+                                const displayScaleX = imgElement.naturalWidth * imgState.scale;
+                                const displayScaleY = imgElement.naturalHeight * imgState.scale;
+                                
+                                const ratioX = printWidth / canvasElement.offsetWidth;
+                                const ratioY = printHeight / canvasElement.offsetHeight;
 
-                                ctx.translate(imgState.x * scaleFactorX, imgState.y * scaleFactorY);
+                                ctx.translate(imgState.x * ratioX, imgState.y * ratioY);
 
-                                // Image aspect scaling configurations
-                                const imgWidth = imgElement.naturalWidth;
-                                const imgHeight = imgElement.naturalHeight;
-                                const slotRatio = colWidth / rowHeight;
-                                const imgRatio = imgWidth / imgHeight;
-
-                                let renderW, renderH;
-                                if (imgRatio > slotRatio) {
-                                    renderH = rowHeight * imgState.scale;
-                                    renderW = (rowHeight * imgRatio) * imgState.scale;
-                                } else {
-                                    renderW = colWidth * imgState.scale;
-                                    renderH = (colWidth / imgRatio) * imgState.scale;
-                                }
+                                const renderW = imgElement.naturalWidth * (imgState.scale * (colWidth / viewContainer.offsetWidth) / imgState.initialScale);
+                                const renderH = imgElement.naturalHeight * (imgState.scale * (rowHeight / viewContainer.offsetHeight) / imgState.initialScale);
 
                                 ctx.drawImage(imgElement, -renderW / 2, -renderH / 2, renderW, renderH);
                                 ctx.restore();
@@ -313,7 +330,7 @@
                         }
                     }
 
-                    // Standard red dashed cut alignment line directly rendered onto output file
+                    // Render cut guidelines directly onto the exported file
                     ctx.save();
                     ctx.strokeStyle = '#ef4444';
                     ctx.lineWidth = 6;
@@ -324,7 +341,6 @@
                     ctx.stroke();
                     ctx.restore();
 
-                    // Process Data Delivery Pipelines
                     const imgData = exportCanvas.toDataURL(`image/${format === 'pdf' ? 'jpeg' : format}`, 0.95);
 
                     if (format === 'pdf') {
@@ -345,6 +361,8 @@
                 }
             }
         }
+        // Helper variable definition required for internal print scale loops
+        const canvasElement = document.getElementById('a4-canvas');
     </script>
 </body>
 </html>
