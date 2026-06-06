@@ -58,7 +58,8 @@
             <div class="grid grid-cols-4 grid-rows-2 h-full w-full relative bg-white gap-0">
                 
                 <template x-for="(slotId, index) in layoutOrder" :key="slotId">
-                    <div class="relative overflow-hidden flex flex-col items-center justify-center group select-none h-full w-full border-0"
+                    <div :id="'slot-container-' + slotId" 
+                         class="relative overflow-hidden flex flex-col items-center justify-center group select-none h-full w-full border-0"
                          :class="{
                             'border-b-2 border-b-dashed border-red-500/80': slotId === 6 || slotId === 5
                          }">
@@ -116,7 +117,7 @@
                 ✂️ Zine Assembly Guide
             </h3>
             <ul class="space-y-1.5 list-disc pl-4 opacity-80">
-                <li><strong>Uncropped Positioning:</strong> Your full photo is safely loaded. You can drag to pan around hidden parts of wide or tall shots seamlessly.</li>
+                <li><strong>1:1 Output Resolution Mirror:</strong> Images and dotted alignment coordinates scale accurately from your exact on-screen layout workspace when exported.</li>
                 <li><strong>Top Row (7, 6, 5, 4)</strong> images face upside down naturally to balance out properly once folded.</li>
                 <li>Cut purely along the center red dashed line dividing the top and bottom rows.</li>
             </ul>
@@ -184,7 +185,6 @@
                     };
                 },
 
-                // Dynamically sets full size bounding measurements based on container limits
                 setImageDefaultDimensions(event, slotId) {
                     const img = event.target;
                     const container = img.parentElement;
@@ -197,10 +197,8 @@
                     const scaleX = containerW / imgW;
                     const scaleY = containerH / imgH;
                     
-                    // Emulate "object-cover" baseline scale but expose uncropped excess data to transforms
                     const baseScale = Math.max(scaleX, scaleY);
                     
-                    // Assign fixed height/width styles directly to bypass CSS auto-contain constraints
                     img.style.width = imgW + 'px';
                     img.style.height = imgH + 'px';
 
@@ -219,7 +217,6 @@
 
                 zoom(slotId, amount) {
                     if (this.images[slotId]) {
-                        // Scales increments proportionally relative to the baseline cover size
                         const step = this.images[slotId].initialScale * amount;
                         this.images[slotId].scale = Math.max(0.05, this.images[slotId].scale + step);
                     }
@@ -241,7 +238,6 @@
                         let currentY = moveEvent.clientY || (moveEvent.touches ? moveEvent.touches[0].clientY : null);
                         
                         if (currentX !== null && currentY !== null) {
-                            // Flips controls if moving items on top row
                             if (this.isUpsideDown(this.activeSlot)) {
                                 this.images[this.activeSlot].x = this.startX - currentX;
                                 this.images[this.activeSlot].y = this.startY - currentY;
@@ -267,9 +263,20 @@
                     window.addEventListener('touchend', stopHandler);
                 },
 
+                // Completely re-engineered 1:1 Proportional Export Engine
                 async download(format) {
+                    const canvasElement = document.getElementById('a4-canvas');
+                    
+                    // Track actual bounding box scale parameters from your screen right now
+                    const workspaceWidth = canvasElement.offsetWidth;
+                    const workspaceHeight = canvasElement.offsetHeight;
+
+                    // Set target high-res printing canvas metrics (300 DPI A4 landscape)
                     const printWidth = 3508;
                     const printHeight = 2480;
+
+                    // Calculate the exact upscale multiplier ratio
+                    const globalScaleMultiplier = printWidth / workspaceWidth;
 
                     const exportCanvas = document.createElement('canvas');
                     exportCanvas.width = printWidth;
@@ -278,9 +285,6 @@
 
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, printWidth, printHeight);
-
-                    const colWidth = printWidth / 4;
-                    const rowHeight = printHeight / 2;
 
                     const gridLayout = [
                         [7, 6, 5, 4],
@@ -292,8 +296,15 @@
                             const slotId = gridLayout[row][col];
                             const imgState = this.images[slotId];
 
-                            const slotX = col * colWidth;
-                            const slotY = row * rowHeight;
+                            // Track the exact layout element box dimension positions from screen space
+                            const slotElement = document.getElementById('slot-container-' + slotId);
+                            if (!slotElement) continue;
+
+                            // Scale screen positions directly to high-res pixels
+                            const slotX = slotElement.offsetLeft * globalScaleMultiplier;
+                            const slotY = slotElement.offsetTop * globalScaleMultiplier;
+                            const cellWidth = slotElement.offsetWidth * globalScaleMultiplier;
+                            const cellHeight = slotElement.offsetHeight * globalScaleMultiplier;
 
                             if (imgState) {
                                 const imgElement = document.getElementById('img-element-' + slotId);
@@ -301,28 +312,25 @@
 
                                 ctx.save();
                                 
+                                // Create a clip mask to contain the image inside the frame limits
                                 ctx.beginPath();
-                                ctx.rect(slotX, slotY, colWidth, rowHeight);
+                                ctx.rect(slotX, slotY, cellWidth, cellHeight);
                                 ctx.clip();
 
-                                ctx.translate(slotX + colWidth / 2, slotY + rowHeight / 2);
+                                // Move context origin to the center point of the high-res cell grid
+                                ctx.translate(slotX + cellWidth / 2, slotY + cellHeight / 2);
 
+                                // Rotate 180 degrees if it's a top-row slot
                                 if (this.isUpsideDown(slotId)) {
                                     ctx.rotate(Math.PI);
                                 }
 
-                                const viewContainer = imgElement.parentElement;
-                                // Convert display coordinates over to high-resolution print pixels
-                                const displayScaleX = imgElement.naturalWidth * imgState.scale;
-                                const displayScaleY = imgElement.naturalHeight * imgState.scale;
-                                
-                                const ratioX = printWidth / canvasElement.offsetWidth;
-                                const ratioY = printHeight / canvasElement.offsetHeight;
+                                // Apply adjusted drag translation offsets multiplied by the canvas resolution scale
+                                ctx.translate(imgState.x * globalScaleMultiplier, imgState.y * globalScaleMultiplier);
 
-                                ctx.translate(imgState.x * ratioX, imgState.y * ratioY);
-
-                                const renderW = imgElement.naturalWidth * (imgState.scale * (colWidth / viewContainer.offsetWidth) / imgState.initialScale);
-                                const renderH = imgElement.naturalHeight * (imgState.scale * (rowHeight / viewContainer.offsetHeight) / imgState.initialScale);
+                                // Map dimensions accurately from display properties over to high-resolution print pixels
+                                const renderW = imgElement.naturalWidth * imgState.scale * globalScaleMultiplier;
+                                const renderH = imgElement.naturalHeight * imgState.scale * globalScaleMultiplier;
 
                                 ctx.drawImage(imgElement, -renderW / 2, -renderH / 2, renderW, renderH);
                                 ctx.restore();
@@ -330,14 +338,14 @@
                         }
                     }
 
-                    // Render cut guidelines directly onto the exported file
+                    // Render precise red dashed guidelines onto the final file
                     ctx.save();
                     ctx.strokeStyle = '#ef4444';
                     ctx.lineWidth = 6;
                     ctx.setLineDash([20, 15]);
                     ctx.beginPath();
-                    ctx.moveTo(0, rowHeight);
-                    ctx.lineTo(printWidth, rowHeight);
+                    ctx.moveTo(0, printHeight / 2);
+                    ctx.lineTo(printWidth, printHeight / 2);
                     ctx.stroke();
                     ctx.restore();
 
@@ -361,8 +369,6 @@
                 }
             }
         }
-        // Helper variable definition required for internal print scale loops
-        const canvasElement = document.getElementById('a4-canvas');
     </script>
 </body>
 </html>
