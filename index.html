@@ -66,10 +66,10 @@
                             <span x-text="'Page ' + slotId"></span>
                         </div>
                         
-                        <template x-if="slotId === 6 || slotId === 5">
-                            <div class="absolute bottom-1 bg-red-600/90 text-white text-[9px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-sm z-30 pointer-events-none shadow-sm"
-                                 :style="isUpsideDown(slotId) ? 'transform: rotate(180deg); transform-origin: center; bottom: auto; top: 4px;' : ''">
-                                ✂️ CUT SPINE HERE
+                        <template x-if="slotId === 7 || slotId === 8">
+                            <div class="absolute right-0 bg-red-600/95 text-white text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-sm z-30 pointer-events-none shadow-sm"
+                                 :style="slotId === 7 ? 'transform: rotate(180deg); transform-origin: center; top: 4px; right: 0;' : 'bottom: 4px; right: 0;'">
+                                ✂️ CUT HERE
                             </div>
                         </template>
                         
@@ -123,7 +123,7 @@
                 </h3>
                 <ul class="space-y-1.5 list-disc pl-4 opacity-80">
                     <li><strong>Perfect Folding Pro-Tip:</strong> Set your printer scaling to <strong>"Actual Size"</strong> (100%) so that the printed grid lines don't accidentally shift inward.</li>
-                    <li><strong>Where to Cut:</strong> Fold your printout into 8 distinct boxes first to locate the center creases. Slice cleanly along the horizontal line dividing <strong>Page 6 and Page 5</strong> from the bottom row frames.</li>
+                    <li><strong>Where to Cut:</strong> Fold your printout into 8 distinct boxes first to find the creases. Slice cleanly along the center line separating the top row and bottom row, cutting **only** along the boundary between Page 7 and Page 6 (and Page 8 and Page 1). Do not cut to the edges!</li>
                 </ul>
             </div>
             
