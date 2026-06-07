@@ -41,7 +41,7 @@ Live Demo: `https://memilyc.github.io/photozine/`
 
 ## 💡 Inspiration & Credits
 
-* **Production Concept:** This project was heavily inspired by this amazing creative project layout on Instagram Reels. Check out the original viral walkthrough here: [Instagram Folding Guide Reel](https://www.instagram.com/reel/DZC0_i2ynTB/?igsh=c2l6MjJxdmoza3pn).
+* **Production Concept:** This project was heavily inspired by this amazing creative project layout on Instagram Reels. Check out the original viral walkthrough here: [Instagram Folding Guide Reel](https://www.instagram.com/reel/DZC0_i2ynTB/?).
 * **Engineering:** Created with 🤍 by **Gemini** — engineered to solve uncompressed memory heap errors with custom pixel coordinate mapping structures.
 
 ---
