@@ -59,15 +59,19 @@
                 
                 <template x-for="(slotId, index) in layoutOrder" :key="slotId">
                     <div :id="'slot-container-' + slotId" 
-                         class="relative overflow-hidden flex flex-col items-center justify-center group select-none h-full w-full border-0"
-                         :class="{
-                            'border-b-2 border-b-dashed border-red-500/80': slotId === 6 || slotId === 5
-                         }">
+                         class="relative overflow-hidden flex flex-col items-center justify-center group select-none h-full w-full border-0">
                         
                         <div class="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm z-30 flex items-center gap-1"
                              :style="isUpsideDown(slotId) ? 'transform: rotate(180deg); transform-origin: center;' : ''">
                             <span x-text="'Page ' + slotId"></span>
                         </div>
+                        
+                        <template x-if="slotId === 6 || slotId === 5">
+                            <div class="absolute bottom-1 bg-red-600/90 text-white text-[9px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-sm z-30 pointer-events-none shadow-sm"
+                                 :style="isUpsideDown(slotId) ? 'transform: rotate(180deg); transform-origin: center; bottom: auto; top: 4px;' : ''">
+                                ✂️ CUT SPINE HERE
+                            </div>
+                        </template>
                         
                         <template x-if="images[slotId]">
                             <div class="w-full h-full relative cursor-move overflow-hidden bg-neutral-900"
@@ -111,16 +115,26 @@
             </div>
         </div>
 
-        <div class="w-full max-w-xl p-4 rounded-lg border text-xs"
+        <div class="w-full max-w-xl p-4 rounded-lg border text-xs flex flex-col gap-3"
              :class="darkMode ? 'bg-[#161b22] border-[#21262d]' : 'bg-white border-[#e1e4e6]'">
-            <h3 class="font-bold mb-2 flex items-center gap-1.5" :class="darkMode ? 'text-white' : 'text-gray-900'">
-                ✂️ Zine Assembly Guide
-            </h3>
-            <ul class="space-y-1.5 list-disc pl-4 opacity-80">
-                <li><strong>1:1 Output Resolution Mirror:</strong> Images and dotted alignment coordinates scale accurately from your exact on-screen layout workspace when exported.</li>
-                <li><strong>Top Row (7, 6, 5, 4)</strong> images face upside down naturally to balance out properly once folded.</li>
-                <li>Cut purely along the center red dashed line dividing the top and bottom rows.</li>
-            </ul>
+            <div>
+                <h3 class="font-bold mb-2 flex items-center gap-1.5" :class="darkMode ? 'text-white' : 'text-gray-900'">
+                    ✂️ Zine Assembly Guide
+                </h3>
+                <ul class="space-y-1.5 list-disc pl-4 opacity-80">
+                    <li><strong>Perfect Folding Pro-Tip:</strong> Set your printer scaling to <strong>"Actual Size"</strong> (100%) so that the printed grid lines don't accidentally shift inward.</li>
+                    <li><strong>Where to Cut:</strong> Fold your printout into 8 distinct boxes first to locate the center creases. Slice cleanly along the horizontal line dividing <strong>Page 6 and Page 5</strong> from the bottom row frames.</li>
+                </ul>
+            </div>
+            
+            <div class="pt-2.5 border-t opacity-90 flex items-center justify-between" :class="darkMode ? 'border-[#21262d]' : 'border-gray-100'">
+                <span class="font-medium text-neutral-400">💡 Production Inspiration</span>
+                <a href="https://www.instagram.com/reel/DZC0_i2ynTB/?igsh=c2l6MjJxdmoza3pn" 
+                   target="_blank" 
+                   class="text-blue-500 hover:text-blue-600 font-semibold inline-flex items-center gap-1 transition-colors">
+                    View Folding Video Tutorial ↗
+                </a>
+            </div>
         </div>
     </main>
 
@@ -263,19 +277,11 @@
                     window.addEventListener('touchend', stopHandler);
                 },
 
-                // Completely re-engineered 1:1 Proportional Export Engine
                 async download(format) {
                     const canvasElement = document.getElementById('a4-canvas');
-                    
-                    // Track actual bounding box scale parameters from your screen right now
                     const workspaceWidth = canvasElement.offsetWidth;
-                    const workspaceHeight = canvasElement.offsetHeight;
-
-                    // Set target high-res printing canvas metrics (300 DPI A4 landscape)
                     const printWidth = 3508;
                     const printHeight = 2480;
-
-                    // Calculate the exact upscale multiplier ratio
                     const globalScaleMultiplier = printWidth / workspaceWidth;
 
                     const exportCanvas = document.createElement('canvas');
@@ -296,11 +302,9 @@
                             const slotId = gridLayout[row][col];
                             const imgState = this.images[slotId];
 
-                            // Track the exact layout element box dimension positions from screen space
                             const slotElement = document.getElementById('slot-container-' + slotId);
                             if (!slotElement) continue;
 
-                            // Scale screen positions directly to high-res pixels
                             const slotX = slotElement.offsetLeft * globalScaleMultiplier;
                             const slotY = slotElement.offsetTop * globalScaleMultiplier;
                             const cellWidth = slotElement.offsetWidth * globalScaleMultiplier;
@@ -311,24 +315,18 @@
                                 if (!imgElement) continue;
 
                                 ctx.save();
-                                
-                                // Create a clip mask to contain the image inside the frame limits
                                 ctx.beginPath();
                                 ctx.rect(slotX, slotY, cellWidth, cellHeight);
                                 ctx.clip();
 
-                                // Move context origin to the center point of the high-res cell grid
                                 ctx.translate(slotX + cellWidth / 2, slotY + cellHeight / 2);
 
-                                // Rotate 180 degrees if it's a top-row slot
                                 if (this.isUpsideDown(slotId)) {
                                     ctx.rotate(Math.PI);
                                 }
 
-                                // Apply adjusted drag translation offsets multiplied by the canvas resolution scale
                                 ctx.translate(imgState.x * globalScaleMultiplier, imgState.y * globalScaleMultiplier);
 
-                                // Map dimensions accurately from display properties over to high-resolution print pixels
                                 const renderW = imgElement.naturalWidth * imgState.scale * globalScaleMultiplier;
                                 const renderH = imgElement.naturalHeight * imgState.scale * globalScaleMultiplier;
 
@@ -337,17 +335,6 @@
                             }
                         }
                     }
-
-                    // Render precise red dashed guidelines onto the final file
-                    ctx.save();
-                    ctx.strokeStyle = '#ef4444';
-                    ctx.lineWidth = 6;
-                    ctx.setLineDash([20, 15]);
-                    ctx.beginPath();
-                    ctx.moveTo(0, printHeight / 2);
-                    ctx.lineTo(printWidth, printHeight / 2);
-                    ctx.stroke();
-                    ctx.restore();
 
                     const imgData = exportCanvas.toDataURL(`image/${format === 'pdf' ? 'jpeg' : format}`, 0.95);
 
@@ -369,6 +356,7 @@
                 }
             }
         }
+        const canvasElement = document.getElementById('a4-canvas');
     </script>
 </body>
 </html>
